@@ -110,3 +110,29 @@ subprojects {
 		tasks.build.dependsOn increment
 	}
 }
+
+evaluationDependsOnChildren()
+
+apply plugin: 'java'
+
+version = "${mod_version}"
+
+jar {
+	subprojects.each { p ->
+		if (p.name=='common') {
+			manifest p.commonManifest
+			p.tasks.shadowJar.outputs.files.each { f ->
+				from zipTree(f)
+			}
+		} else {
+			p.tasks.jar.outputs.files.each { f ->
+				from(f) {
+					rename '.*', p.name+'.jar'
+				}
+			}
+		}
+		dependsOn p.tasks.build
+	}
+	classifier = 'universal'
+	destinationDir = mod_artifacts_dir
+}

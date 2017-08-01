@@ -56,38 +56,10 @@ minecraft {
 	replace '${forgeversion}', project.version_forge
 }
 
-sourceSets {
-    api {
-        java {
-            srcDir '../src/api/java'
-        }
-        resources {
-            srcDir '../src/api/resources'
-        }
-    }
-    main {
-        java {
-            srcDir '../src/main/java'
-        }
-        resources {
-            srcDir '../src/main/resources'
-        }
-    }
-    test {
-        java {
-            srcDir '../src/test/java'
-        }
-        resources {
-            srcDir '../src/test/resources'
-        }
-    }
-}
-
 task setupSourceSets {
 	doLast {
-		sourceSets {
-			[api.java, api.resources, main.java, main.resources, test.java, test.resources]*.srcDirs*.mkdirs()
-		}
+		sourceSets*.java.srcDirs*.each { it.mkdirs() }
+		sourceSets*.resources.srcDirs*.each { it.mkdirs() }
 	}
 	[tasks.eclipse, tasks.idea]*.dependsOn 'setupSourceSets'
 }
@@ -142,6 +114,9 @@ dependencies {
 	shade fileTree(dir: 'libs/shade', include: '*.jar')
 	compile fileTree(dir: '../libs', include: '*.jar')
 	shade fileTree(dir: '../libs/shade', include: '*.jar')
+
+	if (project.name!='common')
+		shade rootProject.project('common')
 }
 
 ext.commonManifest = {
@@ -171,14 +146,13 @@ jar {
 	manifest commonManifest
 }
 
-println !reobf.hasProperty('dependsOn')
+// println !reobf.hasProperty('dependsOn')
 if (!reobf.hasProperty('dependsOn')) {
 	reobf {
 		shadowJar { mappingType = 'SEARGE' }
 	}
 } else {
-	task reobfShadowJar (type: net.minecraftforge.gradle.tasks.user.reobf.ReobfTask) {
-		dependsOn 'genSrgs'
+	task reobfShadowJar(dependsOn: 'genSrgs', type: net.minecraftforge.gradle.tasks.user.reobf.ReobfTask) {
 		def fg_plugin = plugins.findPlugin project.forgegradle_plugin
 		exceptorCfg = fg_plugin.delayedFile net.minecraftforge.gradle.user.UserConstants.EXC_SRG
 		srg = fg_plugin.delayedFile net.minecraftforge.gradle.user.UserConstants.REOBF_SRG
@@ -217,7 +191,7 @@ sourceJar {
 
 // An Error occured while switching above 1.8 -> under 1.7
 task cleanMakeStart(type: Delete) {
-	makeStart.dependsOn 'cleanMakeStart'
+	// makeStart.dependsOn 'cleanMakeStart'
 	delete file(new File(tasks.makeStart.getTemporaryDir(), 'extracted'))
 }
 
