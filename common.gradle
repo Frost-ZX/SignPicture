@@ -20,8 +20,6 @@ buildscript {
 plugins {
 	id 'com.github.johnrengelman.shadow' version '1.2.4'
 	id 'com.matthewprenger.cursegradle' version '1.0.8'
-	id 'com.palantir.git-version' version '0.7.1'
-	id 'co.riiid.gradle' version '0.4.2'
 }
 
 apply plugin: project.forgegradle_plugin
@@ -35,7 +33,7 @@ configurations {
 }
 
 [compileJava, compileApiJava, compileTestJava]*.options*.encoding = 'UTF-8'
-sourceCompatibility = targetCompatibility = '1.6'
+sourceCompatibility = targetCompatibility = '1.8'
 
 minecraft {
 	version = "${project.version_minecraft}-${project.version_forge}"
@@ -219,36 +217,38 @@ artifacts {
 }
 
 task signJars(dependsOn: 'build') {
-	if (project.isProperty('keystore_location')) {
-		ext.keystore_location = project.keystore_location
-		ext.keystore_alias = project.isProperty('keystore_alias') ? project.keystore_alias : ''
-		ext.keystore_password = project.isProperty('keystore_password') ? project.keystore_password : ''
+	gradle.taskGraph.whenReady {taskGraph ->
+		if (taskGraph.hasTask(tasks.signJars))
+			assert sec_keystore_location!=null, 'missing sec_keystore_location'
+	}
 
-		inputs.dir shadowJar.destinationDir
-		inputs.file keystore_location
-		inputs.property 'keystore_alias', keystore_alias
-		inputs.property 'keystore_password', keystore_password
-		outputs.dir shadowJar.destinationDir
+	def keystore_location = sec_keystore_location ?: ''
+	def keystore_alias = sec_keystore_alias ?: ''
+	def keystore_password = sec_keystore_password ?: ''
 
-		doLast {
-			[jar, shadowJar, devJar, sourceJar, apiJar].each { eachtask ->
-				eachtask.outputs.files.each { file ->
-					if (!file.path.endsWith('.jar'))
-						return
+	inputs.dir shadowJar.destinationDir
+	inputs.file keystore_location
+	inputs.property 'keystore_alias', keystore_alias
+	inputs.property 'keystore_password', keystore_password
+	outputs.dir shadowJar.destinationDir
 
-					logger.lifecycle "signing ${file}"
-					ant.signjar(
-							destDir: file.parentFile,
-							jar: file,
-							keystore: keystore_location,
-							alias: keystore_alias,
-							storepass: keystore_password
-					)
-				}
+	doLast {
+		[jar, shadowJar, devJar, sourceJar, apiJar].each { eachtask ->
+			eachtask.outputs.files.each { file ->
+				if (!file.path.endsWith('.jar'))
+					return
+
+				logger.lifecycle "signing ${file}"
+				ant.signjar(
+						destDir: file.parentFile,
+						jar: file,
+						keystore: keystore_location,
+						alias: keystore_alias,
+						storepass: keystore_password
+				)
 			}
 		}
-	} else
-		enabled = false
+	}
 }
 
 task deploy(dependsOn: 'build', type: Copy) {
@@ -271,66 +271,42 @@ task deploy(dependsOn: 'build', type: Copy) {
 	}
 }
 
-def textChangelog = project.isProperty('extra_changelog') ? project.extra_changelog : ''
-if (project.isProperty('extra_changelog_location')) {
-	def fileChangelog = file('changelog.md')
-	textChangelog = fileChangelog.exists()?fileChangelog.getText('UTF-8'):''
-}
-def pre = project.isProperty('version_qualifier')
-
-tasks.curseforge.mustRunAfter 'signJars'
-if (project.isProperty('api_key_curseforge') && project.isProperty('extra_curseforge_id')) {
-	curseforge {
-		tasks.curseforge.mustRunAfter 'signJars'
-		apiKey = project.api_key_curseforge
-		project {
-			id = project.extra_curseforge_id
-
-			changelogType = 'markdown'
-			changelog = textChangelog
-
-			def releasetype = 'alpha'
-			if (pre) {
-				if (project.version_qualifier=='beta')
-					releasetype = 'beta'
-			} else
-				releasetype = 'release'
-			releaseType = releasetype
-
-			mainArtifact(shadowJar) {
-				displayName = "${shadowJar.baseName}-${shadowJar.version}"
-			}
-			[jar, devJar, sourceJar, apiJar].each { jar ->
-				addArtifact(jar) {
-					displayName = "${jar.baseName}-${jar.version}-${jar.classifier}"
-				}
-			}
-
-			relations {
-			}
+curseforge {
+	gradle.taskGraph.whenReady {taskGraph ->
+		if (taskGraph.hasTask(tasks.curseforge)) {
+			assert sec_curseforge_key!=null, 'missing sec_curseforge_key'
+			assert project.isProperty('extra_curseforge_id'), 'missing extra_curseforge_id'
 		}
 	}
-} else
-	tasks.curseforge.enabled = false
 
-tasks.githubRelease.mustRunAfter 'signJars'
-if (project.isProperty('api_key_github') && project.isProperty('extra_github_owner') && project.isProperty('extra_github_repo')) {
-	github {
-		tasks.githubRelease.dependsOn 'build'
-		prerelease = pre
-		owner = project.extra_github_owner
-		repo = project.extra_github_repo
-		token = project.api_key_github
-		tagName = shadowJar.version
-		targetCommitish = plugins.findPlugin('com.palantir.git-version').gitRepo(rootProject).repository.getRef('HEAD').objectId.name()
-		def title = (project.isProperty('extra_github_title')) ? project.release_title : shadowJar.version
-		name = title.replace('{version}', shadowJar.version)
-		body = textChangelog
-		draft = false
-		assets = [shadowJar, jar, devJar, sourceJar, apiJar]*.outputs*.files*.asPath*.tr('\\','/')
+	tasks.curseforge.mustRunAfter 'signJars'
+	apiKey = sec_curseforge_key
+	project {
+		id = project.extra_curseforge_id
+
+		changelogType = 'markdown'
+		changelog = mod_changelog
+
+		def releasetype = 'alpha'
+		if (mod_pre) {
+			if (project.version_qualifier=='beta')
+				releasetype = 'beta'
+		} else
+			releasetype = 'release'
+		releaseType = releasetype
+
+		mainArtifact(shadowJar) {
+			displayName = "${shadowJar.baseName}-${shadowJar.version}"
+		}
+		[jar, devJar, sourceJar, apiJar].each { jar ->
+			addArtifact(jar) {
+				displayName = "${jar.baseName}-${jar.version}-${jar.classifier}"
+			}
+		}
+
+		relations {
+		}
 	}
-} else
-	tasks.githubRelease.enabled = false
+}
 
-['project.gradle'].each { def its = rootProject.file(it); if (its.exists()) apply from: its }
-['project.gradle'].each { def its = file(it); if (its.exists()) apply from: its }
+['project.gradle'].each { f -> [rootProject, project].each { p -> def fs = p.file(f); if (fs.exists()) apply from: fs } }

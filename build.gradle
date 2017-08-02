@@ -1,6 +1,12 @@
 buildscript {
 }
 
+plugins {
+	id 'com.palantir.git-version' version '0.7.1'
+	id 'co.riiid.gradle' version '0.4.2'
+	id 'com.jfrog.bintray' version '1.7.3'
+}
+
 allprojects {
 	project.metaClass {
 		isProperty = { propName ->
@@ -40,6 +46,23 @@ ext {
 		def modartifactsdir = file "artifacts/${modversion}"
 		[buildnumberfile, modversion, buildnumbermicro, modartifactsdir]
 	})()
+	mod_changelog = ({
+		def textChangelog = project.isProperty('extra_changelog') ? project.extra_changelog : ''
+		if (project.isProperty('extra_changelog_location')) {
+			def fileChangelog = file 'changelog.md'
+			textChangelog = fileChangelog.exists()?fileChangelog.getText('UTF-8'):''
+		}
+		textChangelog
+	})()
+	mod_pre = project.isProperty('version_qualifier')
+
+	sec_curseforge_key = System.getenv('CURSEFORGE_TOKEN') ?: project.isProperty('api_key_curseforge') ? project.api_key_curseforge : null
+	sec_github_key = System.getenv('GITHUB_TOKEN') ?: project.isProperty('api_key_github') ? project.api_key_github : null
+	sec_bintray_user = System.getenv('BINTRAY_USER') ?: project.isProperty('api_user_bintray') ? project.api_user_bintray : null
+	sec_bintray_key = System.getenv('BINTRAY_KEY') ?: project.isProperty('api_key_bintray') ? project.api_key_github : null
+	sec_keystore_location = System.getenv('KEYSTORE_LOCATION') ?: project.isProperty('keystore_location') ? project.keystore_location : null
+	sec_keystore_alias = System.getenv('KEYSTORE_ALIAS') ?: project.isProperty('keystore_alias') ? project.keystore_alias : null
+	sec_keystore_password = System.getenv('KEYSTORE_PASSWORD') ?: project.isProperty('keystore_password') ? project.keystore_password : null
 }
 
 task increment {
@@ -114,6 +137,7 @@ subprojects {
 evaluationDependsOnChildren()
 
 apply plugin: 'java'
+apply plugin: 'maven-publish'
 
 version = "${mod_version}"
 
@@ -132,7 +156,77 @@ jar {
 			}
 		}
 		dependsOn p.tasks.build
+		mustRunAfter p.tasks.signJars
 	}
 	classifier = 'universal'
 	destinationDir = mod_artifacts_dir
+}
+
+github {
+	gradle.taskGraph.whenReady {taskGraph ->
+		if (taskGraph.hasTask(tasks.githubRelease)) {
+			assert sec_github_key!=null, 'missing sec_github_key'
+			assert project.isProperty('extra_github_owner'), 'missing extra_github_owner'
+			assert project.isProperty('extra_github_repo'), 'missing extra_github_repo'
+		}
+	}
+
+	def ver = "${mod_version}"
+	tasks.githubRelease.dependsOn 'build'
+	prerelease = mod_pre
+	owner = project.extra_github_owner
+	repo = project.extra_github_repo
+	token = sec_github_key
+	tagName = ver
+	targetCommitish = plugins.findPlugin('com.palantir.git-version').gitRepo(rootProject).repository.getRef('HEAD').objectId.name()
+	def title = (project.isProperty('extra_github_title')) ? project.release_title : ver
+	name = title.replace('{version}', ver)
+	body = mod_changelog
+	draft = false
+	def allassets = [jar]
+	subprojects.each { p ->
+		allassets.addAll([p.tasks.shadowJar, p.tasks.jar, p.tasks.devJar, p.tasks.sourceJar, p.tasks.apiJar]*.outputs*.files*.asPath*.tr('\\','/'))
+	}
+	assets = allassets
+}
+
+publishing {
+	publications {
+		ModPublication(MavenPublication) {
+			groupId = project.group
+			artifactId = project.modid
+			version = "${mod_version}"
+			artifact jar
+			subprojects.each { p ->
+				artifact p.shadowJar
+				artifact p.jar
+				artifact p.devJar
+				artifact p.sourceJar
+				artifact p.apiJar
+			}
+		}
+	}
+}
+
+bintray {
+	gradle.taskGraph.whenReady {taskGraph ->
+		if (taskGraph.hasTask(tasks.bintrayUpload)) {
+			assert sec_bintray_user!=null, 'missing sec_bintray_user'
+			assert sec_bintray_key!=null, 'missing sec_bintray_key'
+			assert project.isProperty('extra_bintray_repo'), 'missing extra_bintray_repo'
+			assert project.isProperty('extra_bintray_name'), 'missing extra_bintray_name'
+		}
+	}
+	user = sec_bintray_user
+	key = sec_bintray_key
+	publications = ['ModPublication']
+	publish = true
+	pkg {
+		repo = project.extra_bintray_repo
+		name = project.extra_bintray_name
+		version {
+			name = "${mod_version}"
+			released = new Date()
+		}
+	}
 }
