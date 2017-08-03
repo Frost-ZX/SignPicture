@@ -1,5 +1,7 @@
 language: java
 jdk: oraclejdk8
+env:
+  - GRADLE_OPTS="-Dorg.gradle.daemon=false"
 before_install:
   - chmod a+x gradlew
   - ./gradlew clean
@@ -13,6 +15,7 @@ before_cache:
   - rm -fr $HOME/.gradle/caches/*/plugin-resolution/
 cache:
   directories:
+    - .buildnumber/
     - $HOME/.gradle/caches/
     - $HOME/.gradle/wrapper/
 notifications:

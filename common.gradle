@@ -18,7 +18,7 @@ buildscript {
 }
 
 plugins {
-	id 'com.github.johnrengelman.shadow' version '1.2.4'
+	id 'com.github.johnrengelman.shadow' version '2.0.1'
 	id 'com.matthewprenger.cursegradle' version '1.0.8'
 }
 
@@ -279,6 +279,7 @@ curseforge {
 		}
 	}
 
+	tasks.curseforge.dependsOn 'reobfShadowJar'
 	tasks.curseforge.mustRunAfter 'signJars'
 	apiKey = sec_curseforge_key
 	project {
