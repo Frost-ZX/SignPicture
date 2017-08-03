@@ -1,7 +1,7 @@
 ## .gitignore ##
 # ignore all
 *
-1.*/*
+1.*/
 changelog.md
 
 # allow any
@@ -25,6 +25,7 @@ changelog.md
 !.gitmodules
 !.gitignore
 !.gitattributes
+!.travis.yml
 !1.*/
 !1.*/lib/
 !1.*/build.gradle
