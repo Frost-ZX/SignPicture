@@ -9,13 +9,12 @@ install: "./gradlew setupCIWorkspace"
 script: "./gradlew build"
 after_success:
   - ./gradlew githubRelease
-  - ./gradlew bintrayUpload
+#  - ./gradlew bintrayUpload
 before_cache:
   - rm -f  $HOME/.gradle/caches/modules-2/modules-2.lock
   - rm -fr $HOME/.gradle/caches/*/plugin-resolution/
 cache:
   directories:
-    - .buildnumber/
     - $HOME/.gradle/caches/
     - $HOME/.gradle/wrapper/
 notifications:
