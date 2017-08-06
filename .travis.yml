@@ -19,12 +19,6 @@ cache:
     - $HOME/.gradle/wrapper/
 notifications:
   email: false
-before_deploy:
-  # Gitの設定
-  - git config --global user.name "Travis CI"
-  - git config --global user.email "travis@travis-ci.org"
-  - git tag $GIT_TAG -a -m "Commit from Travis CI for build $TRAVIS_BUILD_NUMBER"
-  - git push --quiet https://$GH_TOKEN@github.com/<user name>/<repo name>.git --tags 2> /dev/null
 deploy:
   provider: releases
   skip_cleanup: true
