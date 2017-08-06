@@ -6,7 +6,7 @@ before_install:
   - chmod a+x gradlew
   - ./gradlew clean
 install: "./gradlew setupCIWorkspace"
-script: "./gradlew build"
+script: "./gradlew releaseArtifacts"
 after_success:
   #- ./gradlew githubRelease
   #- ./gradlew bintrayUpload
@@ -22,9 +22,9 @@ notifications:
 deploy:
   provider: releases
   skip_cleanup: true
-  api_key: $GITHUB_TOKEN
+  api_key: ${GITHUB_TOKEN}
   file_glob: true
   file: artifacts/release/*
   on:
     all_branches: true
-    tags: true
+    tags: false
