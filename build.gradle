@@ -16,7 +16,7 @@ allprojects {
 }
 
 ext {
-	(mod_version, mod_version_full, mod_pre, mod_artifacts_dir) = ({
+	(mod_version, mod_version_full, mod_pre, mod_artifacts_dir, mod_artifacts_release_dir) = ({
 		assert project.isProperty('version_major'): 'missing property: version_major'
 		assert project.isProperty('version_minor'): 'missing property: version_minor'
 		assert project.isProperty('version_patch'): 'missing property: version_patch'
@@ -30,7 +30,9 @@ ext {
 		def pre = project.isProperty('version_qualifier')
 		if (pre)
 			modversion = "${modversion}-${project.version_qualifier}"
-		if (!buildnumber) {
+		if (buildnumber)
+			buildtext = '+'+String.format('%03d', buildnumber)
+		else {
 			if (pre) {
 				def props = new Properties()
 				if (buildnumberfile.exists())
@@ -68,12 +70,12 @@ ext {
 					tasks.build.dependsOn increment
 				}
 			}
-		} else
-			buildtext = buildnumber ? '+'+String.format('%03d', buildnumber) : ''
+		}
 
 		def modversionfull = "${modversion}${buildtext}"
-		def modartifactsdir = file "artifacts/${modversion}"
-		[modversion, modversionfull, pre, modartifactsdir]
+		def modartifactsdir = file "artifacts/${modversion}/${modversionfull}"
+		def modartifactsreleasedir = file "artifacts/release"
+		[modversion, modversionfull, pre, modartifactsdir, modartifactsreleasedir]
 	})()
 
 	mod_changelog = ({
@@ -171,6 +173,11 @@ jar {
 	}
 	classifier = 'universal'
 	destinationDir = mod_artifacts_dir
+}
+
+task releaseArtifacts(dependsOn: 'build', type: Sync) {
+    from mod_artifacts_dir
+    into mod_artifacts_release_dir
 }
 
 github {
