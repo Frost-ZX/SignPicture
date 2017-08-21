@@ -27,7 +27,7 @@ ext {
 	mod_travis = System.getenv('TRAVIS') as boolean
 	mod_buildnumber = System.getenv('TRAVIS_BUILD_NUMBER') as Integer
 	mod_buildtag = System.getenv('TRAVIS_TAG')
-	mod_prerelease = mod_autorelease = mod_travis && mod_buildtag==null
+	mod_prerelease = mod_autorelease = mod_travis && StringUtils.isEmpty(mod_buildtag)
 
 	if (mod_buildtag!=null && mod_buildtag.startsWith(mod_build_prefix))
 		throw new GradleException("Oops, circulated travis build. A push starting with the prefix '${mod_build_prefix}' was detected: ${mod_buildtag}")
@@ -117,10 +117,8 @@ ext {
 
 	(mod_changelog_title, mod_changelog, mod_releasetype) = ({
 		def (changelog_title, changelog, releasetype) = parseChangelog(({
-			if (mod_buildtag!=null) {
-				def git_tag_name = mod_buildtag
-				println "git tag: ${git_tag_name}"
-				def git_ref = mod_git_repo.getRef "refs/tags/${git_tag_name}"
+			if (!StringUtils.isEmpty(mod_buildtag)) {
+				def git_ref = mod_git_repo.getRef "refs/tags/${mod_buildtag}"
 
 				if (git_ref!=null) {
 					def git_revwalk = new org.eclipse.jgit.revwalk.RevWalk(mod_git_repo)
