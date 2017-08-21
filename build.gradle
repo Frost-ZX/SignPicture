@@ -118,8 +118,8 @@ ext {
 	(mod_changelog_title, mod_changelog, mod_releasetype) = ({
 		def (changelog_title, changelog, releasetype) = parseChangelog(({
 			if (mod_buildtag!=null) {
-				def git_tag_name = 'testtag1'//buildtag
-				def git_ref = git_repo.getRef "refs/tags/${git_tag_name}"
+				def git_tag_name = mod_buildtag
+				def git_ref = mod_git_repo.getRef "refs/tags/${git_tag_name}"
 
 				def git_revwalk = new org.eclipse.jgit.revwalk.RevWalk(mod_git_repo)
 				try {
