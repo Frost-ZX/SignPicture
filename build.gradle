@@ -119,14 +119,17 @@ ext {
 		def (changelog_title, changelog, releasetype) = parseChangelog(({
 			if (mod_buildtag!=null) {
 				def git_tag_name = mod_buildtag
+				println "git tag: ${git_tag_name}"
 				def git_ref = mod_git_repo.getRef "refs/tags/${git_tag_name}"
 
-				def git_revwalk = new org.eclipse.jgit.revwalk.RevWalk(mod_git_repo)
-				try {
-					return git_revwalk.parseTag(git_ref.getObjectId()).getFullMessage()
-				} catch(org.eclipse.jgit.errors.IncorrectObjectTypeException e) {
-				} finally {
-					git_revwalk.dispose()
+				if (git_ref!=null) {
+					def git_revwalk = new org.eclipse.jgit.revwalk.RevWalk(mod_git_repo)
+					try {
+						return git_revwalk.parseTag(git_ref.getObjectId()).getFullMessage()
+					} catch(org.eclipse.jgit.errors.IncorrectObjectTypeException e) {
+					} finally {
+						git_revwalk.dispose()
+					}
 				}
 			} else {
 				def fileChangelog = project.isProperty('extra_changelog_location') ? file(project.extra_changelog_location) : file('changelog.md')
