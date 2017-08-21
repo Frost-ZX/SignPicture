@@ -272,6 +272,7 @@ task deploy(dependsOn: 'build', type: Copy) {
 }
 
 curseforge {
+	tasks.curseforge.enabled = !mod_autorelease
 	gradle.taskGraph.whenReady {taskGraph ->
 		if (taskGraph.hasTask(tasks.curseforge)) {
 			assert sec_curseforge_key!=null, 'missing sec_curseforge_key'
@@ -288,13 +289,7 @@ curseforge {
 		changelogType = 'markdown'
 		changelog = mod_changelog
 
-		def releasetype = 'alpha'
-		if (mod_pre) {
-			if (project.version_qualifier=='beta')
-				releasetype = 'beta'
-		} else
-			releasetype = 'release'
-		releaseType = releasetype
+		releaseType = mod_releasetype
 
 		mainArtifact(shadowJar) {
 			displayName = "${shadowJar.baseName}-${shadowJar.version}"

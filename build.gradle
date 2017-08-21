@@ -15,76 +15,147 @@ allprojects {
 	}
 }
 
+import org.apache.commons.lang.StringUtils
+
 ext {
-	(mod_version, mod_version_full, mod_pre, mod_artifacts_dir, mod_artifacts_release_dir) = ({
-		assert project.isProperty('version_major'): 'missing property: version_major'
-		assert project.isProperty('version_minor'): 'missing property: version_minor'
-		assert project.isProperty('version_patch'): 'missing property: version_patch'
-		def buildnumberfile = file '.buildnumber/buildnum.properties'
-		def modversion = "${project.version_major}.${project.version_minor}.${project.version_patch}"
-		def buildnumbermicro = 0
+	mod_build_prefix = 'b'
 
-		def buildnumber = System.getenv('TRAVIS_BUILD_NUMBER') as Integer
+	assert project.isProperty('version_major'): 'missing property: version_major'
+	assert project.isProperty('version_minor'): 'missing property: version_minor'
+	assert project.isProperty('version_patch'): 'missing property: version_patch'
 
-		def buildtext = ''
-		def pre = project.isProperty('version_qualifier')
-		if (pre)
-			modversion = "${modversion}-${project.version_qualifier}"
-		if (buildnumber)
-			buildtext = '+'+String.format('%03d', buildnumber)
-		else {
-			if (pre) {
-				def props = new Properties()
-				if (buildnumberfile.exists())
-					buildnumberfile.withInputStream { stream ->
-						props.load stream
-					}
+	mod_travis = System.getenv('TRAVIS') as boolean
+	mod_buildnumber = System.getenv('TRAVIS_BUILD_NUMBER') as Integer
+	mod_buildtag = System.getenv('TRAVIS_TAG')
+	mod_prerelease = mod_autorelease = mod_travis && mod_buildtag==null
 
-				if (props.buildnumber &&
-						props.version_major == project.version_major &&
-						props.version_minor == project.version_minor &&
-						props.version_patch == project.version_patch &&
-						props.version_qualifier == project.version_qualifier)
-					buildnumbermicro = props.buildnumber as Integer
+	if (mod_buildtag!=null && mod_buildtag.startsWith(mod_build_prefix))
+		throw new GradleException("Oops, circulated travis build. A push starting with the prefix '${mod_build_prefix}' was detected: ${mod_buildtag}")
 
-				buildtext = buildnumbermicro>0 ? '.'+buildnumbermicro : ''
-			}
+	(mod_version_build, mod_version_meta) = ({
+		if (mod_buildnumber)
+			return [".${mod_buildnumber}", '']
+		else
+			return ({
+				def buildnumberfile = file '.buildnumber/buildnum.properties'
 
-			task increment {
-				doLast {
+				def version_build = ({
+					def buildnumbermicro = 1
 					def props = new Properties()
-					props.version_major = project.version_major
-					props.version_minor = project.version_minor
-					props.version_patch = project.version_patch
-					props.version_qualifier = project.version_qualifier
-					props.buildnumber = buildnumbermicro+1 as String
-					buildnumberfile.parentFile.mkdirs()
-					buildnumberfile.withOutputStream { stream ->
-						props.store stream, 'Build Number Property'
+					if (buildnumberfile.exists())
+						buildnumberfile.withInputStream { stream ->
+							props.load stream
+						}
+
+					if (props.buildnumber &&
+							props.version_major == project.version_major &&
+							props.version_minor == project.version_minor &&
+							props.version_patch == project.version_patch)
+						buildnumbermicro = props.buildnumber as Integer
+					return buildnumbermicro
+				})()
+
+				def buildtextmicro = String.format('%03d', version_build)
+				def buildtext = "+${buildtextmicro}"
+
+				task increment {
+					doLast {
+						def props = new Properties()
+						props.version_major = project.version_major
+						props.version_minor = project.version_minor
+						props.version_patch = project.version_patch
+						props.buildnumber = buildnumbermicro+1 as String
+						buildnumberfile.parentFile.mkdirs()
+						buildnumberfile.withOutputStream { stream ->
+							props.store stream, 'Build Number Property'
+						}
 					}
 				}
-			}
 
-			subprojects {
-				afterEvaluate {
-					tasks.build.dependsOn increment
+				subprojects {
+					afterEvaluate {
+						tasks.build.dependsOn increment
+					}
 				}
-			}
-		}
 
-		def modversionfull = "${modversion}${buildtext}"
-		def modartifactsdir = file "artifacts/${modversion}/${modversionfull}"
-		def modartifactsreleasedir = file "artifacts/release"
-		[modversion, modversionfull, pre, modartifactsdir, modartifactsreleasedir]
+				['.git', buildtext]
+			})()
 	})()
 
-	mod_changelog = ({
-		def textChangelog = project.isProperty('extra_changelog') ? project.extra_changelog : ''
-		if (project.isProperty('extra_changelog_location')) {
-			def fileChangelog = file 'changelog.md'
-			textChangelog = fileChangelog.exists()?fileChangelog.getText('UTF-8'):''
+	mod_version_min = "${project.version_major}.${project.version_minor}.${project.version_patch}"
+	mod_version = "${mod_version_min}${mod_version_build}"
+	mod_version_full = "${mod_version}${mod_version_meta}"
+	mod_artifacts_dir = file "artifacts/${mod_version_min}/${mod_version_full}"
+	mod_artifacts_release_dir = file 'artifacts/release'
+
+	mod_git_repo = plugins.findPlugin('com.palantir.git-version').gitRepo(rootProject).repository
+	mod_git_head = mod_git_repo.getRef('HEAD').objectId.name()
+
+	def parseChangelog = { changelog ->
+		def title = null
+		def msg = null
+		def releasetype = 'release'
+
+		if (changelog!=null) {
+			if (StringUtils.contains(changelog, '[beta]')) {
+				changelog = StringUtils.replace(changelog, '[beta]', '')
+				releasetype = 'beta'
+			} else if (StringUtils.contains(changelog, '[alpha]')) {
+				changelog = StringUtils.replace(changelog, '[alpha]', '')
+				releasetype = 'alpha'
+			}
+
+			def tagtitle = StringUtils.substringBefore(changelog, '\n')
+			def tagmsg = StringUtils.stripStart(StringUtils.substringAfter(changelog, '\n'), '\n')
+			if (!StringUtils.isEmpty(tagtitle) && !StringUtils.isEmpty(tagmsg)) {
+				title = tagtitle
+				msg = tagmsg
+			}
 		}
-		textChangelog
+		return [title, msg, releasetype]
+	}
+
+	(mod_changelog_title, mod_changelog, mod_releasetype) = ({
+		def (changelog_title, changelog, releasetype) = parseChangelog(({
+			if (mod_buildtag!=null) {
+				def git_tag_name = 'testtag1'//buildtag
+				def git_ref = git_repo.getRef "refs/tags/${git_tag_name}"
+
+				def git_revwalk = new org.eclipse.jgit.revwalk.RevWalk(mod_git_repo)
+				try {
+					return git_revwalk.parseTag(git_ref.getObjectId()).getFullMessage()
+				} catch(org.eclipse.jgit.errors.IncorrectObjectTypeException e) {
+				} finally {
+					git_revwalk.dispose()
+				}
+			} else {
+				def fileChangelog = project.isProperty('extra_changelog_location') ? file(project.extra_changelog_location) : file('changelog.md')
+				if (fileChangelog.exists())
+					return fileChangelog.getText('UTF-8')
+			}
+			return null
+		})())
+
+		def (r_changelog_title, r_changelog) = ({
+			def r_change = [changelog_title, changelog]
+					*.replace('{version}', mod_version)
+					*.replace('{version_full}', mod_version_full)
+			if (mod_buildnumber==null)
+				return r_change
+			else if (mod_buildnumber!=null)
+				return r_change
+					*.replace('{version_number}', mod_buildnumber)
+		})()
+
+		if (mod_buildnumber!=null) {
+			if (changelog_title!=null && changelog!=null)
+				return [r_changelog_title, r_changelog, releasetype]
+			return ["v${mod_version}", "v${mod_version_min} Build${mod_buildnumber}", 'alpha']
+		} else {
+			if (changelog_title!=null && changelog!=null)
+				return [r_changelog_title, r_changelog, releasetype]
+			return ["v${mod_version_full}", "v${mod_version_full}", 'alpha']
+		}
 	})()
 
 	sec_curseforge_key = System.getenv('CURSEFORGE_TOKEN') ?: project.isProperty('api_key_curseforge') ? project.api_key_curseforge : null
@@ -189,16 +260,14 @@ github {
 		}
 	}
 
-	def verfull = "${mod_version_full}"
 	tasks.githubRelease.dependsOn 'build'
-	prerelease = mod_pre
+	prerelease = mod_prerelease
 	owner = project.extra_github_owner
 	repo = project.extra_github_repo
 	token = sec_github_key
-	tagName = verfull
-	targetCommitish = plugins.findPlugin('com.palantir.git-version').gitRepo(rootProject).repository.getRef('HEAD').objectId.name()
-	def title = (project.isProperty('extra_github_title')) ? project.release_title : '{version}'
-	name = title.replace('{version}', verfull)
+	tagName = mod_travis ? (mod_autorelease ? "${mod_build_prefix}${mod_buildnumber}" : mod_buildtag) : mod_version_full
+	targetCommitish = mod_git_head
+	name = mod_changelog_title
 	body = mod_changelog
 	draft = false
 	def allassets = [jar]
@@ -227,6 +296,7 @@ publishing {
 }
 
 bintray {
+	tasks.bintrayUpload.enabled = !mod_autorelease
 	gradle.taskGraph.whenReady {taskGraph ->
 		if (taskGraph.hasTask(tasks.bintrayUpload)) {
 			assert sec_bintray_user!=null, 'missing sec_bintray_user'
